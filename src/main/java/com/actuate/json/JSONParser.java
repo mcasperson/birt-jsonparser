@@ -6,11 +6,21 @@ package com.actuate.json;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 
+import org.apache.http.Header;
+import org.apache.http.HeaderElement;
+import org.apache.http.HttpEntity;
+import org.apache.http.HttpException;
+import org.apache.http.HttpRequest;
+import org.apache.http.HttpRequestInterceptor;
+import org.apache.http.HttpResponse;
+import org.apache.http.HttpResponseInterceptor;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.ResponseHandler;
+import org.apache.http.client.entity.GzipDecompressingEntity;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.BasicResponseHandler;
 import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.protocol.HttpContext;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -309,10 +319,46 @@ public class JSONParser {
 	}
 
 	private String getJSONText(final String sPathToJSON)
-			throws FileNotFoundException {
+			throws FileNotFoundException {	
 
 		try {
 			final DefaultHttpClient httpclient = new DefaultHttpClient();
+			
+			httpclient.addRequestInterceptor(new HttpRequestInterceptor() {
+
+                public void process(
+                        final HttpRequest request,
+                        final HttpContext context) throws HttpException, IOException {
+                    if (!request.containsHeader("Accept-Encoding")) {
+                        request.addHeader("Accept-Encoding", "gzip");
+                    }
+                }
+
+            });
+
+            httpclient.addResponseInterceptor(new HttpResponseInterceptor() {
+
+                public void process(
+                        final HttpResponse response,
+                        final HttpContext context) throws HttpException, IOException {
+                    HttpEntity entity = response.getEntity();
+                    if (entity != null) {
+                        Header ceheader = entity.getContentEncoding();
+                        if (ceheader != null) {
+                            HeaderElement[] codecs = ceheader.getElements();
+                            for (int i = 0; i < codecs.length; i++) {
+                                if (codecs[i].getName().equalsIgnoreCase("gzip")) {
+                                    response.setEntity(
+                                            new GzipDecompressingEntity(response.getEntity()));
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+
+            });
+			
 			final HttpGet httpget = new HttpGet(sPathToJSON);
 			final ResponseHandler<String> responseHandler = new BasicResponseHandler();
 			return httpclient.execute(httpget, responseHandler);
