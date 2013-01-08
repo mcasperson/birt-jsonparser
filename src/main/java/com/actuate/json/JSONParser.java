@@ -197,8 +197,8 @@ public class JSONParser {
 	 * @return
 	 * @throws IllegalArgumentException
 	 */
-	public String getValue(final String sParent, final String sKey, final int position)
-			throws IllegalArgumentException {
+	public String getValue(final String sParent, final String sKey,
+			final int position) throws IllegalArgumentException {
 		try {
 			if (sourceJSON != null) {
 				final Object value = getJSONObj(sParent, sourceJSON);
@@ -207,6 +207,70 @@ public class JSONParser {
 						final JSONArray array = (JSONArray) value;
 						final JSONObject arrayValue = (JSONObject) array
 								.get(position);
+						if (sKey.contains("/")) {
+							return getJSONObj(sKey, arrayValue).toString();
+						} else
+							return arrayValue.getString(sKey);
+					} else {
+						return value.toString();
+					}
+				} else
+					return "";
+			} else
+				return "";
+		} catch (final JSONException je) {
+
+		} catch (final Exception ex) {
+
+		}
+		return "";
+	}
+
+	/**
+	 * Gets a primitive value from multiple nested arrays on the JSON source.
+	 * 
+	 * @param arrayIndexes
+	 *            A collection of mappings that identify the child array and the
+	 *            array index. All items in this array, except for the last one,
+	 *            need to reference a nested array. The last item in this
+	 *            collection can reference a value.
+	 * @param sKey
+	 *            to retrieve the value for
+	 * @return
+	 * @throws IllegalArgumentException
+	 */
+	public String getValue(final JSONArrayIndex[] arrayIndexes,
+			final String sKey) throws IllegalArgumentException {
+		try {
+			if (sourceJSON != null && arrayIndexes != null
+					&& arrayIndexes.length != 0) {
+
+				JSONObject lastArray = sourceJSON;
+
+				for (int i = 0; i < arrayIndexes.length - 1; ++i) {
+					final Object thisArray = getJSONObj(
+							arrayIndexes[i].getKey(), lastArray);
+					/*
+					 * Every object returned up until the last one needs to be
+					 * an array. If it isn't, there is a problem
+					 */
+					if (thisArray instanceof JSONArray) {
+						final JSONArray thisArrayCasted = (JSONArray)thisArray;
+						lastArray = (JSONObject)thisArrayCasted.get(arrayIndexes[i].getIndex());
+					} else {
+						return "";
+					}
+				}
+
+				final Object value = getJSONObj(
+						arrayIndexes[arrayIndexes.length - 1].getKey(),
+						lastArray);
+				if (value != null) {
+					if (value instanceof JSONArray) {
+						final JSONArray array = (JSONArray) value;
+						final JSONObject arrayValue = (JSONObject) array
+								.get(arrayIndexes[arrayIndexes.length - 1]
+										.getIndex());
 						if (sKey.contains("/")) {
 							return getJSONObj(sKey, arrayValue).toString();
 						} else
@@ -244,7 +308,8 @@ public class JSONParser {
 		return null;
 	}
 
-	private String getJSONText(final String sPathToJSON) throws FileNotFoundException {
+	private String getJSONText(final String sPathToJSON)
+			throws FileNotFoundException {
 
 		try {
 			final DefaultHttpClient httpclient = new DefaultHttpClient();
