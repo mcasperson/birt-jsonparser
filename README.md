@@ -1,2 +1,1 @@
-birt-jsonparser
-===============
+Read the instructions at https://github.com/mcasperson/birt-jsonparser/wiki/Getting-Started
