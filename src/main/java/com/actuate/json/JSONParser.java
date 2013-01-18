@@ -57,6 +57,7 @@ public class JSONParser {
 	 * 
 	 * @param fullJSONDataPath
 	 *            path to the JSON data source
+	 * @param headers a map of custom headers to sent with the request, or null if no headers are to be set          
 	 * @throws IOException
 	 */
 	public void loadData(final String fullJSONDataPath, final Map<String, String> headers) throws IOException {
