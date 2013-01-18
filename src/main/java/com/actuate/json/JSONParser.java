@@ -5,6 +5,7 @@ package com.actuate.json;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.util.Map;
 
 import org.apache.http.Header;
 import org.apache.http.HeaderElement;
@@ -44,6 +45,11 @@ import org.json.JSONObject;
  */
 public class JSONParser {
 	private JSONObject sourceJSON = null;
+	
+	public void loadData(final String fullJSONDataPath) throws IOException
+	{
+		loadData(fullJSONDataPath, null);
+	}
 
 	/**
 	 * Loads the JSON source into the class instance. Must be called by the DATA
@@ -53,9 +59,9 @@ public class JSONParser {
 	 *            path to the JSON data source
 	 * @throws IOException
 	 */
-	public void loadData(final String fullJSONDataPath) throws IOException {
+	public void loadData(final String fullJSONDataPath, final Map<String, String> headers) throws IOException {
 		try {
-			final String sJSONText = getJSONText(fullJSONDataPath);
+			final String sJSONText = getJSONText(fullJSONDataPath, headers);
 			sourceJSON = new JSONObject(sJSONText);
 		} catch (final JSONException je) {
 
@@ -318,7 +324,7 @@ public class JSONParser {
 		return null;
 	}
 
-	private String getJSONText(final String sPathToJSON)
+	private String getJSONText(final String sPathToJSON, final Map<String, String> headers)
 			throws FileNotFoundException {	
 
 		try {
@@ -331,6 +337,14 @@ public class JSONParser {
                         final HttpContext context) throws HttpException, IOException {
                     if (!request.containsHeader("Accept-Encoding")) {
                         request.addHeader("Accept-Encoding", "gzip");
+                    }
+                    
+                    if (headers != null)
+                    {
+                    	for (final String header : headers.keySet())
+                    	{
+                    		request.addHeader(header, headers.get(header));
+                    	}
                     }
                 }
 
