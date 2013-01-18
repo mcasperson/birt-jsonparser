@@ -5,16 +5,16 @@ package com.actuate.json;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.security.KeyManagementException;
-import java.security.NoSuchAlgorithmException;
-import java.security.SecureRandom;
+import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 import java.util.Map;
 
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocket;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
-
 
 import org.apache.http.Header;
 import org.apache.http.HeaderElement;
@@ -25,6 +25,7 @@ import org.apache.http.HttpRequestInterceptor;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpResponseInterceptor;
 import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.HttpClient;
 import org.apache.http.client.ResponseHandler;
 import org.apache.http.client.entity.GzipDecompressingEntity;
 import org.apache.http.client.methods.HttpGet;
@@ -32,9 +33,9 @@ import org.apache.http.conn.ClientConnectionManager;
 import org.apache.http.conn.scheme.Scheme;
 import org.apache.http.conn.scheme.SchemeRegistry;
 import org.apache.http.conn.ssl.SSLSocketFactory;
+import org.apache.http.conn.ssl.X509HostnameVerifier;
 import org.apache.http.impl.client.BasicResponseHandler;
 import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.impl.conn.SingleClientConnManager;
 import org.apache.http.protocol.HttpContext;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -62,7 +63,7 @@ public class JSONParser {
 	
 	public void loadData(final String fullJSONDataPath) throws IOException
 	{
-		loadData(fullJSONDataPath, null);
+		loadData(fullJSONDataPath, null, false, null);
 	}
 
 	/**
@@ -71,12 +72,20 @@ public class JSONParser {
 	 * 
 	 * @param fullJSONDataPath
 	 *            path to the JSON data source
-	 * @param headers a map of custom headers to sent with the request, or null if no headers are to be set          
+	 * @param headers 
+	 * 				A map of custom headers to sent with the request, or null if no headers are to be set  
+	 * @param ignoreErrors 
+	 * 				Set to true if accessing a https site with certificate issues
+	 * @param wrapJson 
+	 * 				A string array with 2 elements that is used to wrap the resulting JSON. This is used 
+	 * 				when the result is an array, because the getChildCount method does not work on
+	 * 				a returned array. In this case, supply something like ["{\"items\":", "}"] to
+	 * 				reference the array through the property "items".       
 	 * @throws IOException
 	 */
-	public void loadData(final String fullJSONDataPath, final Map<String, String> headers) throws IOException {
+	public void loadData(final String fullJSONDataPath, final Map<String, String> headers, final boolean ignoreErrors, final String[] wrapJson) throws IOException {
 		try {
-			final String sJSONText = getJSONText(fullJSONDataPath, headers);
+			final String sJSONText = getJSONText(fullJSONDataPath, headers, ignoreErrors, wrapJson);
 			sourceJSON = new JSONObject(sJSONText);
 		} catch (final JSONException je) {
 
@@ -338,41 +347,71 @@ public class JSONParser {
 		}
 		return null;
 	}
+	
+	/**
+	 * http://javaskeleton.blogspot.com.au/2010/07/avoiding-peer-not-authenticated-with.html
+	 * @param base
+	 * @return
+	 */
+	private DefaultHttpClient wrapClient(final HttpClient base) {
+        try {
+            final SSLContext ctx = SSLContext.getInstance("TLS");
+            final X509TrustManager tm = new X509TrustManager() {
+ 
+                public void checkClientTrusted(X509Certificate[] xcs, String string) throws CertificateException {
+                }
+ 
+                public void checkServerTrusted(X509Certificate[] xcs, String string) throws CertificateException {
+                }
+ 
+                public X509Certificate[] getAcceptedIssuers() {
+                    return null;
+                }
+            };
+            final X509HostnameVerifier verifier = new X509HostnameVerifier() {
 
-	private String getJSONText(final String sPathToJSON, final Map<String, String> headers)
+				@Override
+				public boolean verify(String hostname, SSLSession session) {
+					return true;
+				}
+
+				@Override
+				public void verify(String arg0, SSLSocket arg1)
+						throws IOException {
+					
+				}
+
+				@Override
+				public void verify(String arg0, X509Certificate arg1)
+						throws SSLException {
+					
+				}
+
+				@Override
+				public void verify(String arg0, String[] arg1, String[] arg2)
+						throws SSLException {
+					
+				}
+
+            };
+            ctx.init(null, new TrustManager[]{tm}, null);
+            final SSLSocketFactory ssf = new SSLSocketFactory(ctx);
+            ssf.setHostnameVerifier(verifier);
+            final ClientConnectionManager ccm = base.getConnectionManager();
+            final SchemeRegistry sr = ccm.getSchemeRegistry();
+            sr.register(new Scheme("https", ssf, 443));
+            return new DefaultHttpClient(ccm, base.getParams());
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            return null;
+        }
+    }
+
+	private String getJSONText(final String sPathToJSON, final Map<String, String> headers, final boolean ignoreErrors, final String[] wrapJson)
 			throws FileNotFoundException {	
 
 		try {
-			
-			final SSLContext sslContext = SSLContext.getInstance("SSL");
-
-			// set up a TrustManager that trusts everything
-			sslContext.init(null, new TrustManager[] { new X509TrustManager() {
-	            public X509Certificate[] getAcceptedIssuers() {
-	                    System.out.println("getAcceptedIssuers =============");
-	                    return null;
-	            }
-
-	            public void checkClientTrusted(X509Certificate[] certs,
-	                            String authType) {
-	                    System.out.println("checkClientTrusted =============");
-	            }
-
-	            public void checkServerTrusted(X509Certificate[] certs,
-	                            String authType) {
-	                    System.out.println("checkServerTrusted =============");
-	            }
-			} }, new SecureRandom());
-
-			final SSLSocketFactory sf = new SSLSocketFactory(sslContext);
-			Scheme httpsScheme = new Scheme("https", 443, sf);
-			SchemeRegistry schemeRegistry = new SchemeRegistry();
-			schemeRegistry.register(httpsScheme);
-
-			// apache HttpClient version >4.2 should use BasicClientConnectionManager
-			ClientConnectionManager cm = new SingleClientConnManager(schemeRegistry);
-			
-			final DefaultHttpClient httpclient = new DefaultHttpClient(cm);
+			final DefaultHttpClient httpclient = ignoreErrors ? wrapClient(new DefaultHttpClient()) : new DefaultHttpClient();
 			
 			httpclient.addRequestInterceptor(new HttpRequestInterceptor() {
 
@@ -419,14 +458,19 @@ public class JSONParser {
 			
 			final HttpGet httpget = new HttpGet(sPathToJSON);
 			final ResponseHandler<String> responseHandler = new BasicResponseHandler();
-			return httpclient.execute(httpget, responseHandler);
+			String retvalue = httpclient.execute(httpget, responseHandler);
+			
+			if (wrapJson != null && wrapJson.length == 2)
+			{
+				retvalue = wrapJson[0] + retvalue + wrapJson[1];
+			}
+			
+			
+			return retvalue;
+			
 		} catch (final ClientProtocolException e) {
 			e.printStackTrace();
 		} catch (final IOException e) {
-			e.printStackTrace();
-		} catch (NoSuchAlgorithmException e) {
-			e.printStackTrace();
-		} catch (KeyManagementException e) {
 			e.printStackTrace();
 		}
 		return "";
